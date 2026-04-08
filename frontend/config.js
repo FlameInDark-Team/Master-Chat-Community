@@ -1,6 +1,6 @@
 // Backend configuration
-// For production, set this to your Railway/Render backend URL
-window.BACKEND_URL = 'https://your-backend-url.railway.app';
+// Production backend URL (Render)
+window.BACKEND_URL = 'https://master-chat-community.onrender.com';
 
-// For local development, comment out the line above
+// For local development, comment out the line above and uncomment below:
 // window.BACKEND_URL = 'http://localhost:3000';
