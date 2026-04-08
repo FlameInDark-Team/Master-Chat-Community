@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat App</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Login Screen -->
+    <div id="loginScreen" class="screen">
+      <div class="login-box">
+        <h1>💬 Welcome to Chat</h1>
+        <p>Join the conversation instantly!</p>
+        <button id="guestBtn" class="btn btn-primary">Join as Guest</button>
+        <div class="divider">OR</div>
+        <button id="adminBtn" class="btn btn-secondary">Sign in as SuperAdmin</button>
+      </div>
+    </div>
+
+    <!-- Chat Screen -->
+    <div id="chatScreen" class="screen hidden">
+      <div class="chat-container">
+        <!-- Header -->
+        <div class="chat-header">
+          <div class="header-left">
+            <h2>💬 Chat Room</h2>
+            <span id="userCount" class="user-count">0 users</span>
+          </div>
+          <div class="header-right">
+            <span id="currentUser" class="current-user"></span>
+            <button id="aiToggle" class="btn-icon" title="Toggle AI Assistant">🤖</button>
+          </div>
+        </div>
+
+        <!-- Messages -->
+        <div id="messages" class="messages"></div>
+
+        <!-- AI Panel -->
+        <div id="aiPanel" class="ai-panel hidden">
+          <div class="ai-header">
+            <h3>🤖 AI Coding Assistant</h3>
+            <button id="aiClose" class="btn-close">×</button>
+          </div>
+          <div id="aiMessages" class="ai-messages"></div>
+          <div class="ai-input-container">
+            <input type="text" id="aiInput" placeholder="Ask coding questions..." />
+            <button id="aiSend" class="btn-send">Send</button>
+          </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-container">
+          <button id="uploadBtn" class="btn-icon" title="Upload file">📎</button>
+          <input type="file" id="fileInput" accept="image/*,.pdf" hidden />
+          <input type="text" id="messageInput" placeholder="Type a message..." />
+          <button id="sendBtn" class="btn-send">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
