@@ -29,6 +29,7 @@ const io = new Server(httpServer, {
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static('frontend'));
 
 // Initialize Groq AI
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -137,6 +138,8 @@ io.on('connection', (socket) => {
         banned: false
       });
       
+      console.log(`User joined: ${username} (${socket.id})`);
+      
       // Load chat history from Supabase
       const { data: messages, error } = await supabase
         .from('messages')
@@ -145,7 +148,9 @@ io.on('connection', (socket) => {
         .limit(100);
       
       if (error) {
-        console.error('Supabase error:', error);
+        console.error('Supabase error loading messages:', error);
+      } else {
+        console.log(`Loaded ${messages?.length || 0} messages from database`);
       }
       
       socket.emit('init', {
@@ -164,84 +169,100 @@ io.on('connection', (socket) => {
     const user = users.get(socket.id);
     if (!user || user.banned) return;
     
-    // Skip moderation for superadmin
-    if (!user.isSuperAdmin) {
-      const isViolation = await moderateMessage(data.text);
-      
-      if (isViolation) {
-        const warnings = (userWarnings.get(socket.id) || 0) + 1;
-        userWarnings.set(socket.id, warnings);
+    try {
+      // Skip moderation for superadmin
+      if (!user.isSuperAdmin) {
+        const isViolation = await moderateMessage(data.text);
         
-        if (warnings >= 5) {
-          user.banned = true;
-          socket.emit('banned', { reason: 'Multiple violations', permanent: true });
-          socket.disconnect();
-          return;
-        } else if (warnings >= 3) {
-          socket.emit('warning', { count: warnings, message: 'Your message violated chat rules' });
-          setTimeout(() => socket.emit('tempBan', { duration: 60000 }), 0);
-          return;
-        } else {
-          socket.emit('warning', { count: warnings, message: 'Please follow chat rules' });
-          return;
-        }
-      }
-    }
-    
-    const message = {
-      id: Date.now() + socket.id,
-      user_id: socket.id,
-      username: user.username,
-      text: data.text,
-      is_superadmin: user.isSuperAdmin,
-      created_at: new Date().toISOString()
-    };
-    
-    // Save to Supabase
-    await supabase.from('messages').insert(message);
-    
-    io.emit('message', message);
-    
-    // Check if message mentions AI
-    if (data.text.toLowerCase().includes('ai')) {
-      // Extract the question (remove "ai" and clean up)
-      const question = data.text.replace(/\bai\b/gi, '').trim();
-      
-      if (question.length > 0) {
-        try {
-          const completion = await groq.chat.completions.create({
-            messages: [{
-              role: 'system',
-              content: 'You are an expert coding assistant in a chat room. Provide clear, concise, and helpful responses. Format code with proper syntax.'
-            }, {
-              role: 'user',
-              content: question
-            }],
-            model: 'llama-3.3-70b-versatile',
-            temperature: 0.7,
-            max_tokens: 1500
-          });
+        if (isViolation) {
+          const warnings = (userWarnings.get(socket.id) || 0) + 1;
+          userWarnings.set(socket.id, warnings);
           
-          const aiResponse = completion.choices[0]?.message?.content;
-          
-          if (aiResponse) {
-            const aiMessage = {
-              id: Date.now() + 'ai',
-              user_id: 'ai-bot',
-              username: '🤖 AI Assistant',
-              text: aiResponse,
-              is_superadmin: false,
-              is_ai: true,
-              created_at: new Date().toISOString()
-            };
-            
-            await supabase.from('messages').insert(aiMessage);
-            io.emit('message', aiMessage);
+          if (warnings >= 5) {
+            user.banned = true;
+            socket.emit('banned', { reason: 'Multiple violations', permanent: true });
+            socket.disconnect();
+            return;
+          } else if (warnings >= 3) {
+            socket.emit('warning', { count: warnings, message: 'Your message violated chat rules' });
+            setTimeout(() => socket.emit('tempBan', { duration: 60000 }), 0);
+            return;
+          } else {
+            socket.emit('warning', { count: warnings, message: 'Please follow chat rules' });
+            return;
           }
-        } catch (error) {
-          console.error('AI response error:', error);
         }
       }
+      
+      const message = {
+        id: Date.now().toString() + socket.id,
+        user_id: socket.id,
+        username: user.username,
+        text: data.text,
+        is_superadmin: user.isSuperAdmin,
+        is_ai: false,
+        created_at: new Date().toISOString()
+      };
+      
+      // Save to Supabase
+      const { error: insertError } = await supabase.from('messages').insert(message);
+      if (insertError) {
+        console.error('Error saving message:', insertError);
+      } else {
+        console.log('Message saved:', message.id);
+      }
+      
+      io.emit('message', message);
+      
+      // Check if message mentions AI
+      if (data.text.toLowerCase().includes('ai')) {
+        // Extract the question (remove "ai" and clean up)
+        const question = data.text.replace(/\bai\b/gi, '').trim();
+        
+        if (question.length > 0) {
+          try {
+            const completion = await groq.chat.completions.create({
+              messages: [{
+                role: 'system',
+                content: 'You are an expert coding assistant in a chat room. Provide clear, concise, and helpful responses. Format code with proper syntax.'
+              }, {
+                role: 'user',
+                content: question
+              }],
+              model: 'llama-3.3-70b-versatile',
+              temperature: 0.7,
+              max_tokens: 1500
+            });
+            
+            const aiResponse = completion.choices[0]?.message?.content;
+            
+            if (aiResponse) {
+              const aiMessage = {
+                id: Date.now().toString() + 'ai',
+                user_id: 'ai-bot',
+                username: '🤖 AI Assistant',
+                text: aiResponse,
+                is_superadmin: false,
+                is_ai: true,
+                created_at: new Date().toISOString()
+              };
+              
+              const { error: aiInsertError } = await supabase.from('messages').insert(aiMessage);
+              if (aiInsertError) {
+                console.error('Error saving AI message:', aiInsertError);
+              } else {
+                console.log('AI message saved:', aiMessage.id);
+              }
+              
+              io.emit('message', aiMessage);
+            }
+          } catch (error) {
+            console.error('AI response error:', error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Message handling error:', error);
     }
   });
   
@@ -331,6 +352,7 @@ app.post('/ai-chat', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Open http://localhost:${PORT} in your browser`);
 });
 
 export default httpServer;
