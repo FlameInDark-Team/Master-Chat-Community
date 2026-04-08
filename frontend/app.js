@@ -1,11 +1,10 @@
-// Auto-detect environment
+// Backend URL configuration
 const BACKEND_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:3000' 
-  : window.location.origin;
+  : (window.BACKEND_URL || window.location.origin);
 
 let socket;
 let currentUser = null;
-let aiChatHistory = [];
 
 // DOM Elements
 const loginScreen = document.getElementById('loginScreen');
@@ -25,7 +24,8 @@ function initSocket() {
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionDelay: 1000,
-    reconnectionAttempts: 5
+    reconnectionAttempts: 10,
+    timeout: 20000
   });
 
   // Socket events
@@ -40,7 +40,7 @@ function initSocket() {
 
   socket.on('connect_error', (error) => {
     console.error('Connection error:', error);
-    showNotification('Connection error. Please refresh the page.');
+    showNotification('Connection error. Please check backend URL.');
   });
 
   socket.on('init', (data) => {
@@ -114,13 +114,10 @@ function initGoogleSignIn() {
 
 // Handle Google Sign-In
 function handleGoogleSignIn(response) {
-  // Decode JWT token to get user info
   const payload = JSON.parse(atob(response.credential.split('.')[1]));
   const email = payload.email;
   
   console.log('Google Sign-In:', email);
-  
-  // Join chat with email
   socket.emit('join', { email });
 }
 
@@ -183,18 +180,10 @@ function displayMessage(msg) {
 
 // Format message text with code blocks
 function formatMessageText(text) {
-  // Escape HTML first
   const escaped = escapeHtml(text);
-  
-  // Format code blocks (```code```)
   let formatted = escaped.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-  
-  // Format inline code (`code`)
   formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
-  
-  // Preserve line breaks
   formatted = formatted.replace(/\n/g, '<br>');
-  
   return formatted;
 }
 
