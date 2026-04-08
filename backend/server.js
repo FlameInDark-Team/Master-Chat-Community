@@ -31,6 +31,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('frontend'));
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Initialize Groq AI
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -321,31 +326,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   } catch (error) {
     console.error('Upload error:', error);
     res.status(500).json({ error: 'Upload failed' });
-  }
-});
-
-// AI chat endpoint
-app.post('/ai-chat', async (req, res) => {
-  try {
-    const { message } = req.body;
-    
-    const completion = await groq.chat.completions.create({
-      messages: [{
-        role: 'system',
-        content: 'You are an expert coding assistant. Provide clear, concise, and helpful responses to programming questions.'
-      }, {
-        role: 'user',
-        content: message
-      }],
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0.7,
-      max_tokens: 2000
-    });
-    
-    res.json({ response: completion.choices[0]?.message?.content });
-  } catch (error) {
-    console.error('AI chat error:', error);
-    res.status(500).json({ error: 'AI request failed' });
   }
 });
 
