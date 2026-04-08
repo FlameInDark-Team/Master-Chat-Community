@@ -3,8 +3,7 @@ const BACKEND_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:3000' 
   : window.location.origin;
 
-const socket = io(BACKEND_URL);
-
+let socket;
 let currentUser = null;
 let aiChatHistory = [];
 
@@ -12,7 +11,6 @@ let aiChatHistory = [];
 const loginScreen = document.getElementById('loginScreen');
 const chatScreen = document.getElementById('chatScreen');
 const guestBtn = document.getElementById('guestBtn');
-const adminBtn = document.getElementById('adminBtn');
 const messages = document.getElementById('messages');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
@@ -27,67 +25,114 @@ const aiMessages = document.getElementById('aiMessages');
 const aiInput = document.getElementById('aiInput');
 const aiSend = document.getElementById('aiSend');
 
+// Initialize Socket.IO connection
+function initSocket() {
+  socket = io(BACKEND_URL, {
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionAttempts: 5
+  });
+
+  // Socket events
+  socket.on('connect', () => {
+    console.log('Connected to server');
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Disconnected from server');
+    showNotification('Connection lost. Reconnecting...');
+  });
+
+  socket.on('connect_error', (error) => {
+    console.error('Connection error:', error);
+    showNotification('Connection error. Please refresh the page.');
+  });
+
+  socket.on('init', (data) => {
+    currentUser = data.user;
+    loginScreen.classList.add('hidden');
+    chatScreen.classList.remove('hidden');
+    currentUserSpan.textContent = currentUser.username;
+    
+    // Load existing messages
+    if (data.messages && data.messages.length > 0) {
+      data.messages.forEach(msg => displayMessage(msg));
+    }
+  });
+
+  socket.on('message', (msg) => {
+    displayMessage(msg);
+  });
+
+  socket.on('messageDeleted', (messageId) => {
+    const msgElement = document.querySelector(`[data-id="${messageId}"]`);
+    if (msgElement) msgElement.remove();
+  });
+
+  socket.on('userJoined', (data) => {
+    userCountSpan.textContent = `${data.userCount} users`;
+    addSystemMessage(`${data.username} joined the chat`);
+  });
+
+  socket.on('userLeft', (data) => {
+    userCountSpan.textContent = `${data.userCount} users`;
+    addSystemMessage(`${data.username} left the chat`);
+  });
+
+  socket.on('warning', (data) => {
+    showNotification(`⚠️ Warning ${data.count}/5: ${data.message}`);
+  });
+
+  socket.on('tempBan', (data) => {
+    showNotification('You have been temporarily banned for 1 minute');
+    messageInput.disabled = true;
+    setTimeout(() => {
+      messageInput.disabled = false;
+      showNotification('You can chat again');
+    }, data.duration);
+  });
+
+  socket.on('banned', (data) => {
+    showNotification(`You have been permanently banned: ${data.reason}`);
+    messageInput.disabled = true;
+    sendBtn.disabled = true;
+  });
+}
+
+// Initialize Google Sign-In
+function initGoogleSignIn() {
+  google.accounts.id.initialize({
+    client_id: '484598065249-6rp6s9res1raad2qed4m5u0tom4sdrmo.apps.googleusercontent.com',
+    callback: handleGoogleSignIn
+  });
+
+  google.accounts.id.renderButton(
+    document.getElementById('googleSignIn'),
+    { 
+      theme: 'outline', 
+      size: 'large',
+      text: 'signin_with',
+      width: 300
+    }
+  );
+}
+
+// Handle Google Sign-In
+function handleGoogleSignIn(response) {
+  // Decode JWT token to get user info
+  const payload = JSON.parse(atob(response.credential.split('.')[1]));
+  const email = payload.email;
+  
+  console.log('Google Sign-In:', email);
+  
+  // Join chat with email
+  socket.emit('join', { email });
+}
+
 // Login handlers
 guestBtn.addEventListener('click', () => {
   socket.emit('join', { email: null });
-});
-
-adminBtn.addEventListener('click', async () => {
-  const email = prompt('Enter SuperAdmin email:');
-  if (email === 'usertest2021subhradeep@gmail.com') {
-    socket.emit('join', { email });
-  } else {
-    showNotification('Invalid admin email!');
-  }
-});
-
-// Socket events
-socket.on('init', (data) => {
-  currentUser = data.user;
-  loginScreen.classList.add('hidden');
-  chatScreen.classList.remove('hidden');
-  currentUserSpan.textContent = currentUser.username;
-  
-  // Load existing messages
-  data.messages.forEach(msg => displayMessage(msg));
-});
-
-socket.on('message', (msg) => {
-  displayMessage(msg);
-});
-
-socket.on('messageDeleted', (messageId) => {
-  const msgElement = document.querySelector(`[data-id="${messageId}"]`);
-  if (msgElement) msgElement.remove();
-});
-
-socket.on('userJoined', (data) => {
-  userCountSpan.textContent = `${data.userCount} users`;
-  addSystemMessage(`${data.username} joined the chat`);
-});
-
-socket.on('userLeft', (data) => {
-  userCountSpan.textContent = `${data.userCount} users`;
-  addSystemMessage(`${data.username} left the chat`);
-});
-
-socket.on('warning', (data) => {
-  showNotification(`⚠️ Warning ${data.count}/5: ${data.message}`);
-});
-
-socket.on('tempBan', (data) => {
-  showNotification('You have been temporarily banned for 1 minute');
-  messageInput.disabled = true;
-  setTimeout(() => {
-    messageInput.disabled = false;
-    showNotification('You can chat again');
-  }, data.duration);
-});
-
-socket.on('banned', (data) => {
-  showNotification(`You have been permanently banned: ${data.reason}`);
-  messageInput.disabled = true;
-  sendBtn.disabled = true;
 });
 
 // Send message
@@ -114,7 +159,7 @@ function displayMessage(msg) {
   
   let html = `
     <div class="message-header">
-      <span class="message-username ${msg.is_superadmin ? 'superadmin' : ''} ${msg.is_ai ? 'ai-username' : ''}">${msg.username}</span>
+      <span class="message-username ${msg.is_superadmin ? 'superadmin' : ''} ${msg.is_ai ? 'ai-username' : ''}">${escapeHtml(msg.username)}</span>
       <span class="message-time">${time}</span>
     </div>
     <div class="message-content">${formatMessageText(msg.text)}</div>
@@ -123,8 +168,8 @@ function displayMessage(msg) {
   if (msg.file_url) {
     html += `
       <div class="file-attachment">
-        <span>${msg.file_type.includes('image') ? '🖼️' : '📄'}</span>
-        <a href="${msg.file_url}" target="_blank">${msg.file_name}</a>
+        <span>${msg.file_type && msg.file_type.includes('image') ? '🖼️' : '📄'}</span>
+        <a href="${msg.file_url}" target="_blank">${escapeHtml(msg.file_name)}</a>
       </div>
     `;
   }
@@ -263,3 +308,9 @@ function showNotification(message) {
   
   setTimeout(() => notif.remove(), 3000);
 }
+
+// Initialize on page load
+window.addEventListener('load', () => {
+  initSocket();
+  initGoogleSignIn();
+});

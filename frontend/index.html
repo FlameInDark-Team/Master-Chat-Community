@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chat App</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <div class="container">
@@ -15,7 +16,8 @@
         <p>Join the conversation instantly!</p>
         <button id="guestBtn" class="btn btn-primary">Join as Guest</button>
         <div class="divider">OR</div>
-        <button id="adminBtn" class="btn btn-secondary">Sign in as SuperAdmin</button>
+        <div id="googleSignIn"></div>
+        <p class="admin-note">Sign in with Google to access SuperAdmin features</p>
       </div>
     </div>
 

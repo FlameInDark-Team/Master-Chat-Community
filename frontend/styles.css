@@ -94,6 +94,18 @@ body {
 .divider::before { left: 0; }
 .divider::after { right: 0; }
 
+.admin-note {
+  font-size: 0.875rem;
+  color: #666;
+  margin-top: 1rem;
+}
+
+#googleSignIn {
+  display: flex;
+  justify-content: center;
+  margin: 0 auto;
+}
+
 /* Chat Screen */
 .chat-container {
   background: white;
