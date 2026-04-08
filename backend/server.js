@@ -8,7 +8,7 @@ import { google } from 'googleapis';
 import multer from 'multer';
 import { createClient } from '@supabase/supabase-js';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname } from 'path';
 import fs from 'fs';
 
 dotenv.config();
@@ -19,8 +19,12 @@ const __dirname = dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: '*' },
-  maxHttpBufferSize: 10e6
+  cors: { 
+    origin: '*',
+    methods: ['GET', 'POST']
+  },
+  maxHttpBufferSize: 10e6,
+  transports: ['websocket', 'polling']
 });
 
 app.use(cors());
@@ -75,7 +79,7 @@ async function moderateMessage(message) {
         role: 'user',
         content: message
       }],
-      model: 'llama-3.1-70b-versatile',
+      model: 'llama-3.3-70b-versatile',
       temperature: 0.3,
       max_tokens: 10
     });
@@ -121,30 +125,39 @@ io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   
   socket.on('join', async ({ email }) => {
-    const isSuperAdmin = email === process.env.SUPERADMIN_EMAIL;
-    const username = isSuperAdmin ? '👑 SuperAdmin' : generateUsername();
-    
-    users.set(socket.id, {
-      id: socket.id,
-      username,
-      email,
-      isSuperAdmin,
-      banned: false
-    });
-    
-    // Load chat history from Supabase
-    const { data: messages } = await supabase
-      .from('messages')
-      .select('*')
-      .order('created_at', { ascending: true })
-      .limit(100);
-    
-    socket.emit('init', {
-      user: users.get(socket.id),
-      messages: messages || []
-    });
-    
-    io.emit('userJoined', { username, userCount: users.size });
+    try {
+      const isSuperAdmin = email === process.env.SUPERADMIN_EMAIL;
+      const username = isSuperAdmin ? '👑 SuperAdmin' : generateUsername();
+      
+      users.set(socket.id, {
+        id: socket.id,
+        username,
+        email,
+        isSuperAdmin,
+        banned: false
+      });
+      
+      // Load chat history from Supabase
+      const { data: messages, error } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(100);
+      
+      if (error) {
+        console.error('Supabase error:', error);
+      }
+      
+      socket.emit('init', {
+        user: users.get(socket.id),
+        messages: messages || []
+      });
+      
+      io.emit('userJoined', { username, userCount: users.size });
+    } catch (error) {
+      console.error('Join error:', error);
+      socket.emit('error', { message: 'Failed to join chat' });
+    }
   });
   
   socket.on('message', async (data) => {
@@ -204,7 +217,7 @@ io.on('connection', (socket) => {
               role: 'user',
               content: question
             }],
-            model: 'llama-3.1-70b-versatile',
+            model: 'llama-3.3-70b-versatile',
             temperature: 0.7,
             max_tokens: 1500
           });
@@ -303,7 +316,7 @@ app.post('/ai-chat', async (req, res) => {
         role: 'user',
         content: message
       }],
-      model: 'llama-3.1-70b-versatile',
+      model: 'llama-3.3-70b-versatile',
       temperature: 0.7,
       max_tokens: 2000
     });
@@ -316,12 +329,8 @@ app.post('/ai-chat', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+httpServer.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
-// For Vercel serverless
-if (process.env.VERCEL) {
-  export default httpServer;
-} else {
-  httpServer.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
+export default httpServer;
